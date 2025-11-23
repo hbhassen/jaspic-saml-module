@@ -1,0 +1,67 @@
+<!--
+ Example snippet for WildFly 31 standalone configuration that wires the custom JASPIC SAML module.
+ Paste the relevant parts inside the <subsystem> areas of your existing standalone.xml.
+-->
+<server xmlns="urn:jboss:domain:19.0">
+    <extensions>
+        <extension module="org.wildfly.extension.undertow"/>
+        <extension module="org.wildfly.extension.security"/>
+        <extension module="org.wildfly.extension.elytron"/>
+    </extensions>
+
+    <profile>
+        <subsystem xmlns="urn:jboss:domain:elytron:19.0">
+            <security-domains>
+                <security-domain name="jaspic-saml-domain" default-realm="ApplicationRealm" permission-mapper="default-permission-mapper">
+                    <realm name="ApplicationRealm"/>
+                    <realm name="local" role-decoder="groups-to-roles"/>
+                </security-domain>
+            </security-domains>
+
+            <application-security-domains>
+                <application-security-domain name="jaspic-saml" security-domain="jaspic-saml-domain" http-authentication-factory="jaspic-saml-http"/>
+            </application-security-domains>
+
+            <http>
+                <http-authentication-factory name="jaspic-saml-http" http-server-mechanism-factory="global" security-domain="jaspic-saml-domain">
+                    <mechanism-configuration>
+                        <mechanism mechanism-name="GLOBAL"/>
+                    </mechanism-configuration>
+                </http-authentication-factory>
+            </http>
+        </subsystem>
+
+        <subsystem xmlns="urn:jboss:domain:undertow:14.0">
+            <application-security-domains>
+                <application-security-domain name="jaspic-saml" http-authentication-factory="jaspic-saml-http"/>
+            </application-security-domains>
+        </subsystem>
+
+        <subsystem xmlns="urn:jboss:domain:security:2.0">
+            <security-domains>
+                <security-domain name="jaspic-saml" cache-type="default">
+                    <authentication>
+                        <login-module code="Dummy" flag="optional"/>
+                    </authentication>
+                </security-domain>
+            </security-domains>
+
+            <jsr196-configuration>
+                <auth-modules>
+                    <auth-module code="com.yourcompany.jaspic.saml" flag="required" module="com.yourcompany.jaspic.saml">
+                        <module-option name="sp-entity-id" value="saml-sp"/>
+                        <module-option name="registration-id" value="saml-sp"/>
+                        <module-option name="idp-entity-id" value="https://localhost:8443/realms/saml-realm"/>
+                        <module-option name="idp-sso-url" value="https://localhost:8443/realms/saml-realm/protocol/saml"/>
+                        <module-option name="keystore-path" value="src/main/resources/keystore.jks"/>
+                        <module-option name="keystore-password" value="changeit"/>
+                        <module-option name="key-alias" value="samlkey"/>
+                        <module-option name="key-password" value="changeit"/>
+                        <module-option name="idp-cert-path" value="src/main/resources/idp.crt"/>
+                        <module-option name="public-paths" value="/,/error,/public/**"/>
+                    </auth-module>
+                </auth-modules>
+            </jsr196-configuration>
+        </subsystem>
+    </profile>
+</server>
