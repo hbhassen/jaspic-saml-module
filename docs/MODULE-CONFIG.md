@@ -15,7 +15,8 @@ This document explains how to package the `jaspic-saml-module` as a WildFly modu
 
 ## Create `module.xml`
 
-Place the following descriptor next to the jar files:
+Place the following descriptor next to the jar files. The Jakarta EE 10 module names shipped with
+WildFly 31 are used to stay compatible with JDK 17 and the default distribution:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -25,8 +26,8 @@ Place the following descriptor next to the jar files:
         <!-- add the copied dependencies as resource-root entries -->
     </resources>
     <dependencies>
-        <module name="javax.api"/>
-        <module name="javax.servlet.api"/>
+        <module name="jakarta.security.auth.message.api"/>
+        <module name="jakarta.servlet.api"/>
         <module name="org.slf4j"/>
     </dependencies>
 </module>
@@ -42,6 +43,10 @@ $WILDFLY_HOME/bin/jboss-cli.sh --connect <<'EOC'
 /subsystem=elytron/custom-realm=jaspic-saml-realm:add(module=org.wildfly.security.sasl, flags=["pass-through"])
 EOC
 ```
+
+The above commands remain useful when bridging a legacy security domain, but the recommended
+WildFly 31 setup uses the `jaspi` subsystem shown in `standalone-sample.xml` so that default
+subsystems stay untouched.
 
 The dummy login module keeps the legacy security domain satisfied while the real authentication is performed by JASPIC.
 
@@ -67,4 +72,4 @@ Then define the HTTP authentication factory using Elytron + JASPIC bridge:
 </http-authentication-factory>
 ```
 
-Finally, add the `auth-module` entry to `undertow` or `security` subsystems depending on the chosen integration strategy (see `standalone-sample.xml`). Module options configure IdP metadata, keystore location, and public paths.
+Finally, declare the `auth-module` using the `jaspi` subsystem (the element name replaces the older `jsr196-configuration` that is no longer used in WildFly 31). Module options configure IdP metadata, keystore location, and public paths. See `standalone-sample.xml` for the recommended Jakarta EE 10 snippet that keeps the default WildFly subsystems intact.
