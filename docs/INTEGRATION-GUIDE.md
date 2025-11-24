@@ -16,7 +16,9 @@ Follow the steps in [MODULE-CONFIG.md](./MODULE-CONFIG.md) to copy the jar files
 
 ## 3. Configure `standalone.xml`
 
-Use [`standalone-sample.xml`](./standalone-sample.xml) as a reference. Ensure that:
+Use [`standalone-sample.xml`](./standalone-sample.xml) as a reference. It is aligned with the default
+subsystems shipped in WildFly 31 (Jakarta EE 10 / JDK 17) and uses the `jaspi` element name required
+by that release. Ensure that:
 
 * The `auth-module` points to `com.yourcompany.jaspic.saml`.
 * Module options define IdP endpoints, keystore path, and `public-paths`.
