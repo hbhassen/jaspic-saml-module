@@ -1,6 +1,9 @@
 # WildFly module installation
 
-This document explains how to package the `jaspic-saml-module` as a WildFly module and wire it into a security domain.
+This document explains how to package the `jaspic-saml-module` as a WildFly module and wire it into a security domain. The
+configuration snippets assume that WildFly can load the `org.wildfly.extension.jaspic` extension (shipped in the
+**preview** layer of WildFly 31). Make sure the layer is enabled before booting or the server will stop with
+`ModuleNotFoundException: org.wildfly.extension.jaspic`.
 
 ## Build and copy the JAR
 
@@ -25,13 +28,23 @@ WildFly 31 are used to stay compatible with JDK 17 and the default distribution:
         <resource-root path="jaspic-saml-module-1.0.0-SNAPSHOT.jar"/>
         <!-- add the copied dependencies as resource-root entries -->
     </resources>
-    <dependencies>
+   <dependencies>
         <module name="jakarta.security.auth.message.api"/>
         <module name="jakarta.servlet.api"/>
         <module name="org.slf4j"/>
-    </dependencies>
+   </dependencies>
 </module>
 ```
+
+If the server fails to boot with `ModuleNotFoundException: org.wildfly.extension.jaspic`, enable the preview layer shipped
+with WildFly 31:
+
+```bash
+echo "layers=base,preview" > $WILDFLY_HOME/modules/layers.conf
+```
+
+Alternatively, copy the `org/wildfly/extension/jaspic` module directory from the `modules/system/layers/preview/` folder in
+the WildFly distribution into your active module path.
 
 ## Register the auth-module in WildFly CLI
 
