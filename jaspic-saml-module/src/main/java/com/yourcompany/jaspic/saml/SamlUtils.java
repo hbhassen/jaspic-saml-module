@@ -2,6 +2,7 @@ package com.yourcompany.jaspic.saml;
 
 import org.opensaml.core.config.InitializationService;
 import org.opensaml.core.xml.XMLObject;
+import org.opensaml.core.xml.XMLObjectBuilder;
 import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
 import org.opensaml.core.xml.io.Marshaller;
 import org.opensaml.core.xml.io.MarshallingException;
@@ -110,9 +111,26 @@ public final class SamlUtils {
     public static AuthnRequest buildAuthnRequest(String idpSsoUrl, String spEntityId, String acsUrl)
             throws SamlProcessingException {
         initializeOpenSaml();
+        if (idpSsoUrl == null || idpSsoUrl.isBlank()) {
+            throw new SamlProcessingException("IdP SSO URL must not be blank");
+        }
+        if (spEntityId == null || spEntityId.isBlank()) {
+            throw new SamlProcessingException("SP entity ID must not be blank");
+        }
+        if (acsUrl == null || acsUrl.isBlank()) {
+            throw new SamlProcessingException("ACS URL must not be blank");
+        }
         try {
-        	LOGGER.info("buildAuthnRequest {}");
-            AuthnRequest authnRequest = (AuthnRequest) XMLObjectSupport.buildXMLObject(AuthnRequest.DEFAULT_ELEMENT_NAME);
+            @SuppressWarnings("unchecked")
+            XMLObjectBuilder<AuthnRequest> authnRequestBuilder =
+                    (XMLObjectBuilder<AuthnRequest>) XMLObjectProviderRegistrySupport.getBuilderFactory()
+                            .getBuilder(AuthnRequest.DEFAULT_ELEMENT_NAME);
+            if (authnRequestBuilder == null) {
+                throw new SamlProcessingException("No builder registered for AuthnRequest");
+            }
+
+            LOGGER.info("buildAuthnRequest for IdP {} and SP {}", idpSsoUrl, spEntityId);
+            AuthnRequest authnRequest = authnRequestBuilder.buildObject(AuthnRequest.DEFAULT_ELEMENT_NAME);
             authnRequest.setID(generateUniqueId());
             authnRequest.setIssueInstant(Instant.now());
             authnRequest.setDestination(idpSsoUrl);
@@ -130,7 +148,7 @@ public final class SamlUtils {
 
             return authnRequest;
         } catch (Exception e) {
-        	LOGGER.info("Unable to build AuthnRequest {}");
+            LOGGER.error("Unable to build AuthnRequest", e);
             throw new SamlProcessingException("Unable to build AuthnRequest", e);
         }
     }
