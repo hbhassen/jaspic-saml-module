@@ -29,9 +29,15 @@ WildFly 31 are used to stay compatible with JDK 17 and the default distribution:
         <module name="jakarta.security.auth.message.api"/>
         <module name="jakarta.servlet.api"/>
         <module name="org.slf4j"/>
+        <!-- ensure JAXP classes like javax.xml.parsers.ParserConfigurationException are visible -->
+        <module name="java.xml"/>
    </dependencies>
 </module>
 ```
+
+The explicit `java.xml` dependency is required because the module makes use of JAXP classes such as
+`javax.xml.parsers.ParserConfigurationException`. Without it, WildFly's module classloader prevents
+those JDK-provided classes from being resolved and authentication fails during initialization.
 
 ## Declare the JASPIC auth-module
 
