@@ -59,7 +59,7 @@ WildFly associates the module with a security domain. The domain defines how aut
 
 ## Auth-module
 
-The `auth-module` declaration in `standalone.xml` points to the custom module installed in WildFly. Module options inject configuration such as IdP endpoints, keystore location, and public paths so no code changes are needed when moving between environments.
+The module is wired through Elytron's `<jaspi>` block inside `standalone.xml`, without enabling the legacy `org.wildfly.extension.jaspic` extension. Module options inject configuration such as IdP endpoints, keystore location, and public paths so no code changes are needed when moving between environments. Undertow's `application-security-domain` enables JASPI for the chosen Elytron security domain so HTTP traffic flows through the SAML module.
 
 ## Public paths
 
@@ -67,4 +67,4 @@ The `auth-module` declaration in `standalone.xml` points to the custom module in
 
 ## standalone.xml configuration
 
-See [`standalone-sample.xml`](./standalone-sample.xml) for a complete, copy-pastable configuration that includes `auth-module` wiring, module options, and security-domain activation.
+See [`standalone-sample.xml`](./standalone-sample.xml) for a complete, copy-pastable configuration that declares the JASPIC module inside Elytron, enables it for Undertow's `application-security-domain`, and supplies all module options.

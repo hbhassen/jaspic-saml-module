@@ -1,9 +1,6 @@
 # WildFly module installation
 
-This document explains how to package the `jaspic-saml-module` as a WildFly module and wire it into a security domain. The
-configuration snippets assume that WildFly can load the `org.wildfly.extension.jaspic` extension (shipped in the
-**preview** layer of WildFly 31). Make sure the layer is enabled before booting or the server will stop with
-`ModuleNotFoundException: org.wildfly.extension.jaspic`.
+This document explains how to package the `jaspic-saml-module` as a WildFly module and wire it into a security domain using Elytron's built-in JASPI support. The configuration stays within the standard Elytron and Undertow subsystems—no `org.wildfly.extension.jaspic` extension or preview layer is required on WildFly 31.
 
 ## Build and copy the JAR
 
@@ -36,53 +33,43 @@ WildFly 31 are used to stay compatible with JDK 17 and the default distribution:
 </module>
 ```
 
-If the server fails to boot with `ModuleNotFoundException: org.wildfly.extension.jaspic`, enable the preview layer shipped
-with WildFly 31:
-
-```bash
-echo "layers=base,preview" > $WILDFLY_HOME/modules/layers.conf
-```
-
-Alternatively, copy the `org/wildfly/extension/jaspic` module directory from the `modules/system/layers/preview/` folder in
-the WildFly distribution into your active module path.
-
-## Register the auth-module in WildFly CLI
-
-```bash
-$WILDFLY_HOME/bin/jboss-cli.sh --connect <<'EOC'
-/subsystem=security/security-domain=jaspic-saml:add(cache-type=default)
-/subsystem=security/security-domain=jaspic-saml/authentication=classic:add()
-/subsystem=security/security-domain=jaspic-saml/authentication=classic/login-module=jaspic-saml:add(code=Dummy,flag=optional)
-/subsystem=elytron/custom-realm=jaspic-saml-realm:add(module=org.wildfly.security.sasl, flags=["pass-through"])
-EOC
-```
-
-The above commands remain useful when bridging a legacy security domain, but the recommended
-WildFly 31 setup uses the `jaspic` subsystem shown in `standalone-sample.xml` so that default
-subsystems stay untouched.
-
-The dummy login module keeps the legacy security domain satisfied while the real authentication is performed by JASPIC.
-
 ## Declare the JASPIC auth-module
 
-In `standalone.xml`, under the `undertow` subsystem, add:
+In `standalone.xml`, configure the module inside Elytron's `<jaspi>` block and enable JASPI for Undertow's application security domain. The key fragments look like this (full example in `standalone-sample.xml`):
 
 ```xml
-<application-security-domains>
-    <application-security-domain name="jaspic-saml" http-authentication-factory="jaspic-saml-http"/>
-</application-security-domains>
+<subsystem xmlns="urn:wildfly:elytron:18.0" final-providers="combined-providers" disallowed-providers="OracleUcrypto">
+    <!-- providers, security-realms, security-domains omitted for brevity -->
+    <jaspi>
+        <jaspi-configuration>
+            <server-auth-modules class-name="com.yourcompany.jaspic.saml.SamlServerAuthModule" module="com.yourcompany.jaspic.saml" flag="REQUIRED">
+                <options>
+                    <property name="sp-entity-id" value="saml-sp"/>
+                    <property name="registration-id" value="saml-sp"/>
+                    <property name="idp-entity-id" value="https://localhost:8443/realms/saml-realm"/>
+                    <property name="idp-sso-url" value="https://localhost:8443/realms/saml-realm/protocol/saml"/>
+                    <property name="keystore-path" value="src/main/resources/keystore.jks"/>
+                    <property name="keystore-password" value="changeit"/>
+                    <property name="key-alias" value="samlkey"/>
+                    <property name="key-password" value="changeit"/>
+                    <property name="idp-cert-path" value="src/main/resources/idp.crt"/>
+                    <property name="public-paths" value="/,/error,/public/**"/>
+                </options>
+            </server-auth-modules>
+        </jaspi-configuration>
+    </jaspi>
+</subsystem>
+
+<subsystem xmlns="urn:jboss:domain:undertow:14.0" default-security-domain="other">
+    <!-- listeners omitted for brevity -->
+    <application-security-domains>
+        <application-security-domain name="other" security-domain="ApplicationDomain" enable-jaspi="true" integrated-jaspi="false"/>
+    </application-security-domains>
+</subsystem>
 ```
 
-Then define the HTTP authentication factory using Elytron + JASPIC bridge:
+The Elytron security domain referenced by Undertow (`ApplicationDomain` above) must include the realms that should receive the authenticated principal. Set `enable-jaspi="true"` to allow the `SamlServerAuthModule` to drive the HTTP authentication flow, and leave `integrated-jaspi="false"` so the custom module remains in control of redirects and assertion processing.
 
-```xml
-<http-authentication-factory name="jaspic-saml-http" http-server-mechanism-factory="global" security-domain="jaspic-saml-domain">
-    <mechanism-configuration>
-        <mechanism mechanism-name="BASIC"/>
-        <mechanism mechanism-name="FORM"/>
-        <mechanism mechanism-name="GLOBAL"/>
-    </mechanism-configuration>
-</http-authentication-factory>
-```
+## Logging
 
-Finally, declare the `auth-module` using the `jaspic` subsystem (the element name replaces the older `jsr196-configuration` that is no longer used in WildFly 31). Module options configure IdP metadata, keystore location, and public paths. See `standalone-sample.xml` for the recommended Jakarta EE 10 snippet that keeps the default WildFly subsystems intact.
+Add a logger category for `com.yourcompany.jaspic.saml` (e.g., level `DEBUG`) in the logging subsystem to trace SAML exchanges and module lifecycle events while validating the setup.

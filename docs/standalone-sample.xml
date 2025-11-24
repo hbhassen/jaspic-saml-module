@@ -2,7 +2,6 @@
 
 <server xmlns="urn:jboss:domain:20.0">
     <extensions>
-        <!-- The jaspic extension lives in the WildFly preview layer; enable it in modules/layers.conf -->
         <extension module="org.jboss.as.clustering.infinispan"/>
         <extension module="org.jboss.as.connector"/>
         <extension module="org.jboss.as.deployment-scanner"/>
@@ -39,7 +38,6 @@
         <extension module="org.wildfly.extension.request-controller"/>
         <extension module="org.wildfly.extension.security.manager"/>
         <extension module="org.wildfly.extension.undertow"/>
-        <extension module="org.wildfly.extension.jaspic"/>
     </extensions>
     <management>
         <audit-log>
@@ -97,6 +95,9 @@
                 <level name="WARN"/>
             </logger>
             <logger category="org.jboss.as.config">
+                <level name="DEBUG"/>
+            </logger>
+            <logger category="com.yourcompany.jaspic.saml">
                 <level name="DEBUG"/>
             </logger>
             <logger category="sun.rmi">
@@ -359,6 +360,24 @@
             <policy name="jacc">
                 <jacc-policy/>
             </policy>
+            <jaspi>
+                <jaspi-configuration>
+                    <server-auth-modules class-name="com.yourcompany.jaspic.saml.SamlServerAuthModule" module="com.yourcompany.jaspic.saml" flag="REQUIRED">
+                        <options>
+                            <property name="sp-entity-id" value="saml-sp"/>
+                            <property name="registration-id" value="saml-sp"/>
+                            <property name="idp-entity-id" value="https://localhost:8443/realms/saml-realm"/>
+                            <property name="idp-sso-url" value="https://localhost:8443/realms/saml-realm/protocol/saml"/>
+                            <property name="keystore-path" value="src/main/resources/keystore.jks"/>
+                            <property name="keystore-password" value="changeit"/>
+                            <property name="key-alias" value="samlkey"/>
+                            <property name="key-password" value="changeit"/>
+                            <property name="idp-cert-path" value="src/main/resources/idp.crt"/>
+                            <property name="public-paths" value="/,/error,/public/**"/>
+                        </options>
+                    </server-auth-modules>
+                </jaspi-configuration>
+            </jaspi>
         </subsystem>
         <subsystem xmlns="urn:wildfly:elytron-oidc-client:2.0"/>
         <subsystem xmlns="urn:wildfly:health:1.0" security-enabled="false"/>
@@ -495,8 +514,7 @@
                 <file name="welcome-content" path="${jboss.home.dir}/welcome-content"/>
             </handlers>
             <application-security-domains>
-                <application-security-domain name="other" security-domain="ApplicationDomain"/>
-                <application-security-domain name="jaspic-saml" security-domain="JaspicSamlDomain" http-authentication-factory="jaspic-saml-http"/>
+                <application-security-domain name="other" security-domain="ApplicationDomain" enable-jaspi="true" integrated-jaspi="false"/>
             </application-security-domains>
         </subsystem>
         <subsystem xmlns="urn:jboss:domain:webservices:2.0" statistics-enabled="${wildfly.webservices.statistics-enabled:${wildfly.statistics-enabled:false}}">
@@ -510,24 +528,6 @@
             <client-config name="Standard-Client-Config"/>
         </subsystem>
         <subsystem xmlns="urn:jboss:domain:weld:5.0"/>
-        <subsystem xmlns="urn:jboss:domain:jaspic:1.0">
-            <jaspi>
-                <auth-modules>
-                    <auth-module code="com.yourcompany.jaspic.saml" flag="required" module="com.yourcompany.jaspic.saml">
-                        <module-option name="sp-entity-id" value="saml-sp"/>
-                        <module-option name="registration-id" value="saml-sp"/>
-                        <module-option name="idp-entity-id" value="https://localhost:8443/realms/saml-realm"/>
-                        <module-option name="idp-sso-url" value="https://localhost:8443/realms/saml-realm/protocol/saml"/>
-                        <module-option name="keystore-path" value="src/main/resources/keystore.jks"/>
-                        <module-option name="keystore-password" value="changeit"/>
-                        <module-option name="key-alias" value="samlkey"/>
-                        <module-option name="key-password" value="changeit"/>
-                        <module-option name="idp-cert-path" value="src/main/resources/idp.crt"/>
-                        <module-option name="public-paths" value="/,/error,/public/**"/>
-                    </auth-module>
-                </auth-modules>
-            </jaspi>
-        </subsystem>
     </profile>
     <interfaces>
         <interface name="management">
