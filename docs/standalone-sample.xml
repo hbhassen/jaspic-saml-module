@@ -361,20 +361,22 @@
                 <jacc-policy/>
             </policy>
             <jaspi>
-                <jaspi-configuration>
-                    <server-auth-modules class-name="com.yourcompany.jaspic.saml.SamlServerAuthModule" module="com.yourcompany.jaspic.saml" flag="REQUIRED">
-                        <options>
-                            <property name="sp-entity-id" value="saml-sp"/>
-                            <property name="registration-id" value="saml-sp"/>
-                            <property name="idp-entity-id" value="https://localhost:8443/realms/saml-realm"/>
-                            <property name="idp-sso-url" value="https://localhost:8443/realms/saml-realm/protocol/saml"/>
-                            <property name="keystore-path" value="src/main/resources/keystore.jks"/>
-                            <property name="keystore-password" value="changeit"/>
-                            <property name="key-alias" value="samlkey"/>
-                            <property name="key-password" value="changeit"/>
-                            <property name="idp-cert-path" value="src/main/resources/idp.crt"/>
-                            <property name="public-paths" value="/,/error,/public/**"/>
-                        </options>
+                <jaspi-configuration name="jaspi-test" layer="HttpServlet">
+                    <server-auth-modules>
+                        <server-auth-module class-name="com.yourcompany.jaspic.saml.SamlServerAuthModule" module="com.yourcompany.jaspic.saml" flag="REQUIRED">
+                            <options>
+                                <property name="sp-entity-id" value="saml-sp"/>
+                                <property name="registration-id" value="saml-sp"/>
+                                <property name="idp-entity-id" value="https://localhost:8443/realms/saml-realm"/>
+                                <property name="idp-sso-url" value="https://localhost:8443/realms/saml-realm/protocol/saml"/>
+                                <property name="keystore-path" value="src/main/resources/keystore.jks"/>
+                                <property name="keystore-password" value="changeit"/>
+                                <property name="key-alias" value="samlkey"/>
+                                <property name="key-password" value="changeit"/>
+                                <property name="idp-cert-path" value="src/main/resources/idp.crt"/>
+                                <property name="public-paths" value="/,/error,/public/**"/>
+                            </options>
+                        </server-auth-module>
                     </server-auth-modules>
                 </jaspi-configuration>
             </jaspi>

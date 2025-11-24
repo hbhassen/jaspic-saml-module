@@ -20,7 +20,7 @@ Use [`standalone-sample.xml`](./standalone-sample.xml) as a reference. It keeps 
 subsystem shipped in WildFly 31 (Jakarta EE 10 / JDK 17) and declares the auth module inside
 the Elytron subsystem. Ensure that:
 
-* The Elytron `<jaspi>` entry points to `com.yourcompany.jaspic.saml.SamlServerAuthModule` with the desired options.
+* The Elytron `<jaspi>` entry points to `com.yourcompany.jaspic.saml.SamlServerAuthModule` (layer `HttpServlet`) with the desired options.
 * Module options define IdP endpoints, keystore path, and `public-paths`.
 * Undertow's `application-security-domain` enables JASPI for the Elytron security domain handling your application.
 
