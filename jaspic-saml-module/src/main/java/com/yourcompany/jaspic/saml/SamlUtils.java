@@ -2,28 +2,44 @@ package com.yourcompany.jaspic.saml;
 
 import org.opensaml.core.config.InitializationService;
 import org.opensaml.core.xml.XMLObject;
+import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
+import org.opensaml.core.xml.io.Marshaller;
+import org.opensaml.core.xml.io.MarshallingException;
 import org.opensaml.core.xml.io.Unmarshaller;
 import org.opensaml.core.xml.io.UnmarshallerFactory;
 import org.opensaml.core.xml.io.UnmarshallingException;
-import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
+import org.opensaml.core.xml.util.XMLObjectSupport;
+import org.opensaml.saml.common.SAMLVersion;
+import org.opensaml.saml.common.xml.SAMLConstants;
 import org.opensaml.saml.saml2.core.Assertion;
+import org.opensaml.saml.saml2.core.AuthnRequest;
 import org.opensaml.saml.saml2.core.EncryptedAssertion;
+import org.opensaml.saml.saml2.core.Issuer;
+import org.opensaml.saml.saml2.core.NameIDPolicy;
 import org.opensaml.saml.saml2.core.Response;
 import org.opensaml.saml.saml2.core.Subject;
 import org.opensaml.saml.saml2.encryption.Decrypter;
 import org.opensaml.security.x509.BasicX509Credential;
+import org.opensaml.security.x509.X509Credential;
+import org.opensaml.security.SecurityException;
 import org.opensaml.xmlsec.encryption.support.DecryptionException;
 import org.opensaml.xmlsec.keyinfo.impl.StaticKeyInfoCredentialResolver;
+import org.opensaml.xmlsec.keyinfo.KeyInfoGenerator;
+import org.opensaml.xmlsec.keyinfo.impl.X509KeyInfoGeneratorFactory;
 import org.opensaml.xmlsec.signature.Signature;
+import org.opensaml.xmlsec.signature.support.SignatureConstants;
 import org.opensaml.xmlsec.signature.support.SignatureException;
 import org.opensaml.xmlsec.signature.support.SignatureValidator;
+import org.opensaml.xmlsec.signature.support.Signer;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import net.shibboleth.utilities.java.support.xml.SerializeSupport;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -31,11 +47,17 @@ import java.nio.file.Path;
 import java.security.PrivateKey;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Collection of helper utilities around OpenSAML 4 that keep the {@link SamlServerAuthModule} lean.
@@ -72,6 +94,93 @@ public final class SamlUtils {
             initialized = true;
         } catch (Exception e) {
             throw new SamlProcessingException("Unable to initialize OpenSAML", e);
+        }
+    }
+
+    private static String generateUniqueId() {
+        return "_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * Builds a basic AuthnRequest suitable for HTTP-Redirect binding.
+     */
+    public static AuthnRequest buildAuthnRequest(String idpSsoUrl, String spEntityId, String acsUrl)
+            throws SamlProcessingException {
+        initializeOpenSaml();
+        try {
+            AuthnRequest authnRequest = (AuthnRequest) XMLObjectSupport.buildXMLObject(AuthnRequest.DEFAULT_ELEMENT_NAME);
+            authnRequest.setID(generateUniqueId());
+            authnRequest.setIssueInstant(Instant.now());
+            authnRequest.setDestination(idpSsoUrl);
+            authnRequest.setProtocolBinding(SAMLConstants.SAML2_POST_BINDING_URI);
+            authnRequest.setAssertionConsumerServiceURL(acsUrl);
+            authnRequest.setVersion(SAMLVersion.VERSION_20);
+
+            Issuer issuer = (Issuer) XMLObjectSupport.buildXMLObject(Issuer.DEFAULT_ELEMENT_NAME);
+            issuer.setValue(spEntityId);
+            authnRequest.setIssuer(issuer);
+
+            NameIDPolicy nameIDPolicy = (NameIDPolicy) XMLObjectSupport.buildXMLObject(NameIDPolicy.DEFAULT_ELEMENT_NAME);
+            nameIDPolicy.setAllowCreate(true);
+            authnRequest.setNameIDPolicy(nameIDPolicy);
+
+            return authnRequest;
+        } catch (Exception e) {
+            throw new SamlProcessingException("Unable to build AuthnRequest", e);
+        }
+    }
+
+    /**
+     * Signs the provided AuthnRequest using RSA SHA-256 and exclusive canonicalization.
+     */
+    public static void signAuthnRequest(AuthnRequest authnRequest, X509Credential credential)
+            throws SamlProcessingException {
+        initializeOpenSaml();
+        Objects.requireNonNull(authnRequest, "AuthnRequest must not be null");
+        Objects.requireNonNull(credential, "Signing credential must not be null");
+
+        Signature signature = (Signature) XMLObjectSupport.buildXMLObject(Signature.DEFAULT_ELEMENT_NAME);
+        signature.setSigningCredential(credential);
+        signature.setSignatureAlgorithm(SignatureConstants.ALGO_ID_SIGNATURE_RSA_SHA256);
+        signature.setCanonicalizationAlgorithm(SignatureConstants.ALGO_ID_C14N_EXCL_OMIT_COMMENTS);
+        try {
+            X509KeyInfoGeneratorFactory keyInfoGeneratorFactory = new X509KeyInfoGeneratorFactory();
+            keyInfoGeneratorFactory.setEmitEntityCertificate(true);
+            KeyInfoGenerator keyInfoGenerator = keyInfoGeneratorFactory.newInstance();
+            signature.setKeyInfo(keyInfoGenerator.generate(credential));
+            authnRequest.setSignature(signature);
+            Marshaller marshaller = XMLObjectProviderRegistrySupport.getMarshallerFactory().getMarshaller(authnRequest);
+            if (marshaller == null) {
+                throw new SamlProcessingException("No marshaller available for AuthnRequest");
+            }
+            marshaller.marshall(authnRequest);
+            Signer.signObject(signature);
+        } catch (MarshallingException | SecurityException | SignatureException e) {
+            throw new SamlProcessingException("Unable to sign AuthnRequest", e);
+        }
+    }
+
+    /**
+     * Marshals, deflates and Base64 encodes a SAML object ready for HTTP-Redirect transport.
+     */
+    public static String deflateAndBase64Encode(XMLObject xmlObject) throws SamlProcessingException {
+        initializeOpenSaml();
+        try {
+            Marshaller marshaller = XMLObjectProviderRegistrySupport.getMarshallerFactory().getMarshaller(xmlObject);
+            if (marshaller == null) {
+                throw new SamlProcessingException("No marshaller for object " + xmlObject.getElementQName());
+            }
+            Element element = marshaller.marshall(xmlObject);
+            String xmlString = SerializeSupport.nodeToString(element);
+
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            try (DeflaterOutputStream deflaterOutputStream =
+                         new DeflaterOutputStream(byteArrayOutputStream, new Deflater(Deflater.DEFLATED, true))) {
+                deflaterOutputStream.write(xmlString.getBytes(UTF_8));
+            }
+            return Base64.getEncoder().encodeToString(byteArrayOutputStream.toByteArray());
+        } catch (MarshallingException | IOException e) {
+            throw new SamlProcessingException("Unable to encode SAML object", e);
         }
     }
 
