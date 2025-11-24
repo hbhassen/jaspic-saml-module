@@ -103,7 +103,7 @@ public class SamlServerAuthModule implements ServerAuthModule {
         if (samlResponseParam != null && !samlResponseParam.isBlank()) {
             return handleSamlResponse(clientSubject, response, samlResponseParam);
         }
-
+        LOGGER.info("At this stage authentication is required  for public path {}", path);
         // At this stage authentication is required but no assertion is present: trigger redirect to the IdP.
         triggerIdentityProviderRedirect(request, response);
         return AuthStatus.SEND_CONTINUE;
@@ -149,12 +149,15 @@ public class SamlServerAuthModule implements ServerAuthModule {
         try {
             String relayState = Base64.getEncoder().encodeToString(request.getRequestURL().toString().getBytes(UTF_8));
             String acsUrl = request.getRequestURL().toString();
-
+            LOGGER.info("  AuthnRequest relayState: {}", relayState);
+            LOGGER.info("AuthnRequest acsUrl: {}", acsUrl);
             BasicX509Credential credential = loadServiceProviderCredential();
             var authnRequest = SamlUtils.buildAuthnRequest(config.getIdpSsoUrl(), config.getSpEntityId(), acsUrl);
+            LOGGER.info("AuthnRequest toString: {}", authnRequest.toString());
             SamlUtils.signAuthnRequest(authnRequest, credential);
+            LOGGER.info("AuthnRequest end signAuthnRequest: {}");
             String encodedRequest = SamlUtils.deflateAndBase64Encode(authnRequest);
-
+            LOGGER.info("AuthnRequest encodedRequest: {}", encodedRequest);
             String redirectUrl = config.getIdpSsoUrl()
                     + "?SAMLRequest=" + URLEncoder.encode(encodedRequest, UTF_8)
                     + "&RelayState=" + URLEncoder.encode(relayState, UTF_8);
@@ -179,6 +182,7 @@ public class SamlServerAuthModule implements ServerAuthModule {
 
     private BasicX509Credential loadServiceProviderCredential() throws SamlProcessingException {
         try {
+        	 LOGGER.debug("AuthnRequest loadServiceProviderCredential");
             KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
             try (var in = java.nio.file.Files.newInputStream(config.getKeystorePath())) {
                 keyStore.load(in, config.getKeystorePassword());
@@ -190,6 +194,7 @@ public class SamlServerAuthModule implements ServerAuthModule {
             }
             return new BasicX509Credential(certificate, privateKey);
         } catch (Exception e) {
+        	 LOGGER.debug("AuthnRequest Unable to load SP credentials");
             throw new SamlProcessingException("Unable to load SP credentials", e);
         }
     }

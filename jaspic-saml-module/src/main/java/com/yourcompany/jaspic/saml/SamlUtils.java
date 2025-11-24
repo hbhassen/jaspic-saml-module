@@ -31,6 +31,8 @@ import org.opensaml.xmlsec.signature.support.SignatureConstants;
 import org.opensaml.xmlsec.signature.support.SignatureException;
 import org.opensaml.xmlsec.signature.support.SignatureValidator;
 import org.opensaml.xmlsec.signature.support.Signer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import net.shibboleth.utilities.java.support.xml.SerializeSupport;
@@ -72,6 +74,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * }</pre>
  */
 public final class SamlUtils {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SamlUtils.class);
 
     private static volatile boolean initialized;
 
@@ -108,6 +111,7 @@ public final class SamlUtils {
             throws SamlProcessingException {
         initializeOpenSaml();
         try {
+        	LOGGER.info("buildAuthnRequest {}");
             AuthnRequest authnRequest = (AuthnRequest) XMLObjectSupport.buildXMLObject(AuthnRequest.DEFAULT_ELEMENT_NAME);
             authnRequest.setID(generateUniqueId());
             authnRequest.setIssueInstant(Instant.now());
@@ -126,6 +130,7 @@ public final class SamlUtils {
 
             return authnRequest;
         } catch (Exception e) {
+        	LOGGER.info("Unable to build AuthnRequest {}");
             throw new SamlProcessingException("Unable to build AuthnRequest", e);
         }
     }
@@ -136,6 +141,7 @@ public final class SamlUtils {
     public static void signAuthnRequest(AuthnRequest authnRequest, X509Credential credential)
             throws SamlProcessingException {
         initializeOpenSaml();
+        LOGGER.info(" signAuthnRequest {}");
         Objects.requireNonNull(authnRequest, "AuthnRequest must not be null");
         Objects.requireNonNull(credential, "Signing credential must not be null");
 
@@ -156,6 +162,7 @@ public final class SamlUtils {
             marshaller.marshall(authnRequest);
             Signer.signObject(signature);
         } catch (MarshallingException | SecurityException | SignatureException e) {
+        	 LOGGER.info(" Unable to sign AuthnRequest {}");
             throw new SamlProcessingException("Unable to sign AuthnRequest", e);
         }
     }
