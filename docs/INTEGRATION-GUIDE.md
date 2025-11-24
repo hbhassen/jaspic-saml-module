@@ -17,12 +17,12 @@ Follow the steps in [MODULE-CONFIG.md](./MODULE-CONFIG.md) to copy the jar files
 ## 3. Configure `standalone.xml`
 
 Use [`standalone-sample.xml`](./standalone-sample.xml) as a reference. It keeps every default
-subsystem shipped in WildFly 31 (Jakarta EE 10 / JDK 17) and adds the `jaspic` element name required
-by that release. Ensure that:
+subsystem shipped in WildFly 31 (Jakarta EE 10 / JDK 17) and declares the auth module inside
+the Elytron subsystem. Ensure that:
 
-* The `auth-module` points to `com.yourcompany.jaspic.saml`.
+* The Elytron `<jaspi>` entry points to `com.yourcompany.jaspic.saml.SamlServerAuthModule` (layer `HttpServlet`) with the desired options.
 * Module options define IdP endpoints, keystore path, and `public-paths`.
-* The `application-security-domain` references the security domain that activates this auth module.
+* Undertow's `application-security-domain` enables JASPI for the Elytron security domain handling your application.
 
 ## 4. Deploy the demo application
 
@@ -44,7 +44,6 @@ Use browser developer tools to inspect the HTTP-POST containing `SAMLResponse` i
 | Redirect loop | Assertion consumer URL incorrect | Ensure WildFly public URL matches IdP configuration |
 | No roles applied | IdP attributes not mapped to `roles`/`groups` | Configure attribute release on IdP |
 | Decryption failure | Wrong keystore password or alias | Confirm `keystore-path`, `key-alias`, and passwords |
-| Boot fails with `ModuleNotFoundException: org.wildfly.extension.jaspic` | WildFly preview layer not enabled | Set `layers=base,preview` in `$WILDFLY_HOME/modules/layers.conf` or copy the `org/wildfly/extension/jaspic` module from the preview layer into the active modules path |
 
 ## 7. Troubleshooting tips
 
