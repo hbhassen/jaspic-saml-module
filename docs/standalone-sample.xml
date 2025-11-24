@@ -38,7 +38,7 @@
         <extension module="org.wildfly.extension.request-controller"/>
         <extension module="org.wildfly.extension.security.manager"/>
         <extension module="org.wildfly.extension.undertow"/>
-        <extension module="org.wildfly.extension.jaspi"/>
+        <extension module="org.wildfly.extension.jaspic"/>
     </extensions>
     <management>
         <audit-log>
@@ -509,7 +509,7 @@
             <client-config name="Standard-Client-Config"/>
         </subsystem>
         <subsystem xmlns="urn:jboss:domain:weld:5.0"/>
-        <subsystem xmlns="urn:jboss:domain:jaspi:1.0">
+        <subsystem xmlns="urn:jboss:domain:jaspic:1.0">
             <jaspi>
                 <auth-modules>
                     <auth-module code="com.yourcompany.jaspic.saml" flag="required" module="com.yourcompany.jaspic.saml">

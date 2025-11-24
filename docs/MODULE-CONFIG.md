@@ -45,7 +45,7 @@ EOC
 ```
 
 The above commands remain useful when bridging a legacy security domain, but the recommended
-WildFly 31 setup uses the `jaspi` subsystem shown in `standalone-sample.xml` so that default
+WildFly 31 setup uses the `jaspic` subsystem shown in `standalone-sample.xml` so that default
 subsystems stay untouched.
 
 The dummy login module keeps the legacy security domain satisfied while the real authentication is performed by JASPIC.
@@ -72,4 +72,4 @@ Then define the HTTP authentication factory using Elytron + JASPIC bridge:
 </http-authentication-factory>
 ```
 
-Finally, declare the `auth-module` using the `jaspi` subsystem (the element name replaces the older `jsr196-configuration` that is no longer used in WildFly 31). Module options configure IdP metadata, keystore location, and public paths. See `standalone-sample.xml` for the recommended Jakarta EE 10 snippet that keeps the default WildFly subsystems intact.
+Finally, declare the `auth-module` using the `jaspic` subsystem (the element name replaces the older `jsr196-configuration` that is no longer used in WildFly 31). Module options configure IdP metadata, keystore location, and public paths. See `standalone-sample.xml` for the recommended Jakarta EE 10 snippet that keeps the default WildFly subsystems intact.
