@@ -44,6 +44,7 @@ Use browser developer tools to inspect the HTTP-POST containing `SAMLResponse` i
 | Redirect loop | Assertion consumer URL incorrect | Ensure WildFly public URL matches IdP configuration |
 | No roles applied | IdP attributes not mapped to `roles`/`groups` | Configure attribute release on IdP |
 | Decryption failure | Wrong keystore password or alias | Confirm `keystore-path`, `key-alias`, and passwords |
+| Boot fails with `ModuleNotFoundException: org.wildfly.extension.jaspic` | WildFly preview layer not enabled | Set `layers=base,preview` in `$WILDFLY_HOME/modules/layers.conf` or copy the `org/wildfly/extension/jaspic` module from the preview layer into the active modules path |
 
 ## 7. Troubleshooting tips
 
