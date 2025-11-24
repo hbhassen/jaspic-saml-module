@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.Principal;
@@ -32,6 +33,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+
+import org.opensaml.security.x509.BasicX509Credential;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * {@link ServerAuthModule} implementation that delegates authentication to an external SAML v2 Identity Provider.
@@ -142,11 +147,20 @@ public class SamlServerAuthModule implements ServerAuthModule {
 
     private void triggerIdentityProviderRedirect(HttpServletRequest request, HttpServletResponse response) throws AuthException {
         try {
-            String relayState = Base64.getEncoder().encodeToString(request.getRequestURL().toString().getBytes());
-            String redirectUrl = config.getIdpSsoUrl() + "?spEntityId=" + config.getSpEntityId() + "&RelayState=" + relayState;
-            LOGGER.debug("Redirecting to IdP: {}", redirectUrl);
+            String relayState = Base64.getEncoder().encodeToString(request.getRequestURL().toString().getBytes(UTF_8));
+            String acsUrl = request.getRequestURL().toString();
+
+            BasicX509Credential credential = loadServiceProviderCredential();
+            var authnRequest = SamlUtils.buildAuthnRequest(config.getIdpSsoUrl(), config.getSpEntityId(), acsUrl);
+            SamlUtils.signAuthnRequest(authnRequest, credential);
+            String encodedRequest = SamlUtils.deflateAndBase64Encode(authnRequest);
+
+            String redirectUrl = config.getIdpSsoUrl()
+                    + "?SAMLRequest=" + URLEncoder.encode(encodedRequest, UTF_8)
+                    + "&RelayState=" + URLEncoder.encode(relayState, UTF_8);
+            LOGGER.debug("Redirecting to IdP with AuthnRequest: {}", redirectUrl);
             response.sendRedirect(redirectUrl);
-        } catch (IOException e) {
+        } catch (IOException | SamlProcessingException e) {
             throw new AuthException("Unable to redirect to IdP", e);
         }
     }
@@ -160,6 +174,23 @@ public class SamlServerAuthModule implements ServerAuthModule {
             return (PrivateKey) keyStore.getKey(config.getKeyAlias(), config.getKeyPassword());
         } catch (Exception e) {
             throw new SamlProcessingException("Unable to load SP private key", e);
+        }
+    }
+
+    private BasicX509Credential loadServiceProviderCredential() throws SamlProcessingException {
+        try {
+            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            try (var in = java.nio.file.Files.newInputStream(config.getKeystorePath())) {
+                keyStore.load(in, config.getKeystorePassword());
+            }
+            PrivateKey privateKey = (PrivateKey) keyStore.getKey(config.getKeyAlias(), config.getKeyPassword());
+            X509Certificate certificate = (X509Certificate) keyStore.getCertificate(config.getKeyAlias());
+            if (certificate == null) {
+                throw new SamlProcessingException("No certificate found for alias " + config.getKeyAlias());
+            }
+            return new BasicX509Credential(certificate, privateKey);
+        } catch (Exception e) {
+            throw new SamlProcessingException("Unable to load SP credentials", e);
         }
     }
 
