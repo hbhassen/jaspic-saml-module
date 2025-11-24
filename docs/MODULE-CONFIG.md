@@ -4,11 +4,11 @@ This document explains how to package the `jaspic-saml-module` as a WildFly modu
 
 ## Build and copy the JAR
 
-1. Build the library:
+1. Build the library. A shaded jar with all runtime dependencies will be produced under `target`:
    ```bash
    mvn -pl jaspic-saml-module clean package
    ```
-2. Copy `jaspic-saml-module/target/jaspic-saml-module-1.0.0-SNAPSHOT.jar` and all its runtime dependencies (`opensaml-*`, `xmlsec`, `bcprov`, `slf4j-api`) into a module folder, for example:
+2. Copy `jaspic-saml-module/target/jaspic-saml-module-1.0.0-SNAPSHOT-all.jar` into a module folder, for example:
    ```
    $WILDFLY_HOME/modules/com/yourcompany/jaspic/saml/main/
    ```
@@ -22,8 +22,7 @@ WildFly 31 are used to stay compatible with JDK 17 and the default distribution:
 <?xml version="1.0" encoding="UTF-8"?>
 <module xmlns="urn:jboss:module:1.9" name="com.yourcompany.jaspic.saml">
     <resources>
-        <resource-root path="jaspic-saml-module-1.0.0-SNAPSHOT.jar"/>
-        <!-- add the copied dependencies as resource-root entries -->
+        <resource-root path="jaspic-saml-module-1.0.0-SNAPSHOT-all.jar"/>
     </resources>
    <dependencies>
         <module name="jakarta.security.auth.message.api"/>
@@ -37,7 +36,9 @@ WildFly 31 are used to stay compatible with JDK 17 and the default distribution:
 
 The explicit `java.xml` dependency is required because the module makes use of JAXP classes such as
 `javax.xml.parsers.ParserConfigurationException`. Without it, WildFly's module classloader prevents
-those JDK-provided classes from being resolved and authentication fails during initialization.
+those JDK-provided classes from being resolved and authentication fails during initialization. The
+fat jar ensures the OpenSAML xmlsec signature classes (for example
+`org.opensaml.xmlsec.signature.support.SignatureException`) are available to the module classloader.
 
 ## Declare the JASPIC auth-module
 
