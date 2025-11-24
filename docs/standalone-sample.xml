@@ -1,12 +1,14 @@
 <!--
- Example snippet for WildFly 31 standalone configuration that wires the custom JASPIC SAML module.
- Paste the relevant parts inside the <subsystem> areas of your existing standalone.xml.
+ Example snippet for WildFly 31 (Jakarta EE 10 / JDK 17) standalone configuration that wires the
+ custom JASPIC SAML module.
+ Paste the relevant parts inside the <subsystem> areas of your existing standalone.xml while keeping
+ all default subsystems in place.
 -->
-<server xmlns="urn:jboss:domain:19.0">
+<server xmlns="urn:jboss:domain:20.0">
     <extensions>
-        <extension module="org.wildfly.extension.undertow"/>
-        <extension module="org.wildfly.extension.security"/>
         <extension module="org.wildfly.extension.elytron"/>
+        <extension module="org.wildfly.extension.jaspi"/>
+        <extension module="org.wildfly.extension.undertow"/>
     </extensions>
 
     <profile>
@@ -37,16 +39,8 @@
             </application-security-domains>
         </subsystem>
 
-        <subsystem xmlns="urn:jboss:domain:security:2.0">
-            <security-domains>
-                <security-domain name="jaspic-saml" cache-type="default">
-                    <authentication>
-                        <login-module code="Dummy" flag="optional"/>
-                    </authentication>
-                </security-domain>
-            </security-domains>
-
-            <jsr196-configuration>
+        <subsystem xmlns="urn:jboss:domain:jaspi:1.0">
+            <jaspi>
                 <auth-modules>
                     <auth-module code="com.yourcompany.jaspic.saml" flag="required" module="com.yourcompany.jaspic.saml">
                         <module-option name="sp-entity-id" value="saml-sp"/>
@@ -61,7 +55,7 @@
                         <module-option name="public-paths" value="/,/error,/public/**"/>
                     </auth-module>
                 </auth-modules>
-            </jsr196-configuration>
+            </jaspi>
         </subsystem>
     </profile>
 </server>
