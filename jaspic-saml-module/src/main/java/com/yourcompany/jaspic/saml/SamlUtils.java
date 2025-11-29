@@ -1,9 +1,15 @@
 package com.yourcompany.jaspic.saml;
 
+import org.opensaml.core.config.ConfigurationService;
+import org.opensaml.core.config.InitializationException;
 import org.opensaml.core.config.InitializationService;
 import org.opensaml.core.xml.XMLObject;
 import org.opensaml.core.xml.XMLObjectBuilder;
 import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
+import org.opensaml.core.xml.config.XMLObjectProviderInitializer;
+import org.opensaml.core.xml.config.XMLObjectProviderRegistry;
+import org.opensaml.saml.config.impl.SAMLConfigurationInitializer;
+import org.opensaml.xmlsec.config.impl.JavaCryptoValidationInitializer;
 import org.opensaml.core.xml.io.Marshaller;
 import org.opensaml.core.xml.io.MarshallingException;
 import org.opensaml.core.xml.io.Unmarshaller;
@@ -12,6 +18,7 @@ import org.opensaml.core.xml.io.UnmarshallingException;
 import org.opensaml.core.xml.util.XMLObjectSupport;
 import org.opensaml.saml.common.SAMLVersion;
 import org.opensaml.saml.common.xml.SAMLConstants;
+import org.opensaml.saml.common.SAMLObjectContentReference;
 import org.opensaml.saml.saml2.core.Assertion;
 import org.opensaml.saml.saml2.core.AuthnRequest;
 import org.opensaml.saml.saml2.core.EncryptedAssertion;
@@ -31,9 +38,11 @@ import org.opensaml.xmlsec.signature.Signature;
 import org.opensaml.xmlsec.signature.support.SignatureConstants;
 import org.opensaml.xmlsec.signature.support.SignatureException;
 import org.opensaml.xmlsec.signature.support.SignatureValidator;
-import org.opensaml.xmlsec.signature.support.Signer;
+import org.opensaml.xmlsec.signature.support.impl.provider.ApacheSantuarioSignerProviderImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.shibboleth.utilities.java.support.component.ComponentInitializationException;
+import net.shibboleth.utilities.java.support.xml.BasicParserPool;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import net.shibboleth.utilities.java.support.xml.SerializeSupport;
@@ -89,15 +98,82 @@ public final class SamlUtils {
      *
      * @throws SamlProcessingException when initialization fails
      */
-    public static synchronized void initializeOpenSaml() throws SamlProcessingException {
+    public static void initializeOpenSaml() throws SamlProcessingException {
         if (initialized) {
             return;
         }
-        try {
-            InitializationService.initialize();
-            initialized = true;
-        } catch (Exception e) {
-            throw new SamlProcessingException("Unable to initialize OpenSAML", e);
+
+        synchronized (SamlUtils.class) {
+            if (initialized) {
+                return;
+            }
+
+            ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+            ClassLoader samlClassLoader = SamlUtils.class.getClassLoader();
+            try {
+                // Ensure OpenSAML can discover its configuration resources even when running inside a WildFly module.
+                Thread.currentThread().setContextClassLoader(samlClassLoader);
+
+                InitializationService.initialize();
+
+                XMLObjectProviderRegistry registry = ConfigurationService.get(XMLObjectProviderRegistry.class);
+                // In some modular containers (WildFly/JBoss Modules) the ServiceLoader discovery used by the
+                // InitializationService may fail to wire the registry, so attempt a manual bootstrap as a fallback.
+                if (registry == null || registry.getBuilderFactory() == null) {
+                    try {
+                        new XMLObjectProviderInitializer().init();
+                        registry = ConfigurationService.get(XMLObjectProviderRegistry.class);
+                    } catch (InitializationException e) {
+                        throw new SamlProcessingException("OpenSAML fallback initialization failed", e);
+                    }
+                }
+
+                if (registry == null || registry.getBuilderFactory() == null) {
+                    throw new SamlProcessingException("OpenSAML initialization failed: builder factory not available");
+                }
+                // Ensure the registry is bound for subsequent lookups performed with the application classloader.
+                ConfigurationService.register(XMLObjectProviderRegistry.class, registry);
+
+                if (XMLObjectProviderRegistrySupport.getParserPool() == null) {
+                    try {
+                        BasicParserPool parserPool = new BasicParserPool();
+                        parserPool.setMaxPoolSize(50);
+                        parserPool.setNamespaceAware(true);
+                        parserPool.initialize();
+                        // Bind parser pool both on the static support and on the registry to avoid null marshaller issues.
+                        XMLObjectProviderRegistrySupport.setParserPool(parserPool);
+                        registry.setParserPool(parserPool);
+                    } catch (ComponentInitializationException e) {
+                        throw new SamlProcessingException("OpenSAML initialization failed: unable to initialize parser pool", e);
+                    }
+                }
+
+                var builderFactory = registry.getBuilderFactory();
+                if (builderFactory.getBuilder(AuthnRequest.DEFAULT_ELEMENT_NAME) == null) {
+                    try {
+                        // Explicitly initialize SAML object providers/config when ServiceLoader discovery is blocked.
+                        new org.opensaml.saml.config.impl.XMLObjectProviderInitializer().init();
+                        new SAMLConfigurationInitializer().init();
+                        new org.opensaml.xmlsec.config.impl.XMLObjectProviderInitializer().init();
+                        new JavaCryptoValidationInitializer().init();
+                        registry = ConfigurationService.get(XMLObjectProviderRegistry.class);
+                        builderFactory = registry != null ? registry.getBuilderFactory() : null;
+                    } catch (InitializationException e) {
+                        throw new SamlProcessingException("OpenSAML SAML initializer failed", e);
+                    }
+                }
+                if (builderFactory == null || builderFactory.getBuilder(AuthnRequest.DEFAULT_ELEMENT_NAME) == null) {
+                    throw new SamlProcessingException("OpenSAML initialization failed: AuthnRequest builder unavailable");
+                }
+                if (builderFactory.getBuilder(Signature.DEFAULT_ELEMENT_NAME) == null) {
+                    throw new SamlProcessingException("OpenSAML initialization failed: Signature builder unavailable");
+                }
+                initialized = true;
+            } catch (InitializationException e) {
+                throw new SamlProcessingException("Unable to initialize OpenSAML", e);
+            } finally {
+                Thread.currentThread().setContextClassLoader(originalClassLoader);
+            }
         }
     }
 
@@ -121,10 +197,14 @@ public final class SamlUtils {
             throw new SamlProcessingException("ACS URL must not be blank");
         }
         try {
+            var builderFactory = XMLObjectProviderRegistrySupport.getBuilderFactory();
+            if (builderFactory == null) {
+                throw new SamlProcessingException("OpenSAML was not initialized: builder factory is unavailable");
+            }
+
             @SuppressWarnings("unchecked")
             XMLObjectBuilder<AuthnRequest> authnRequestBuilder =
-                    (XMLObjectBuilder<AuthnRequest>) XMLObjectProviderRegistrySupport.getBuilderFactory()
-                            .getBuilder(AuthnRequest.DEFAULT_ELEMENT_NAME);
+                    (XMLObjectBuilder<AuthnRequest>) builderFactory.getBuilder(AuthnRequest.DEFAULT_ELEMENT_NAME);
             if (authnRequestBuilder == null) {
                 throw new SamlProcessingException("No builder registered for AuthnRequest");
             }
@@ -159,15 +239,22 @@ public final class SamlUtils {
     public static void signAuthnRequest(AuthnRequest authnRequest, X509Credential credential)
             throws SamlProcessingException {
         initializeOpenSaml();
-        LOGGER.info(" signAuthnRequest {}");
+        LOGGER.debug("Signing AuthnRequest {}", authnRequest.getID());
         Objects.requireNonNull(authnRequest, "AuthnRequest must not be null");
         Objects.requireNonNull(credential, "Signing credential must not be null");
 
-        Signature signature = (Signature) XMLObjectSupport.buildXMLObject(Signature.DEFAULT_ELEMENT_NAME);
-        signature.setSigningCredential(credential);
-        signature.setSignatureAlgorithm(SignatureConstants.ALGO_ID_SIGNATURE_RSA_SHA256);
-        signature.setCanonicalizationAlgorithm(SignatureConstants.ALGO_ID_C14N_EXCL_OMIT_COMMENTS);
         try {
+            Signature signature = (Signature) XMLObjectSupport.buildXMLObject(Signature.DEFAULT_ELEMENT_NAME);
+            signature.setSigningCredential(credential);
+            signature.setSignatureAlgorithm(SignatureConstants.ALGO_ID_SIGNATURE_RSA_SHA256);
+            signature.setCanonicalizationAlgorithm(SignatureConstants.ALGO_ID_C14N_EXCL_OMIT_COMMENTS);
+
+            // Explicitly attach content reference with a digest algorithm to avoid provider lookup failures.
+            var contentReference = new SAMLObjectContentReference(authnRequest);
+            contentReference.setDigestAlgorithm(SignatureConstants.ALGO_ID_DIGEST_SHA256);
+            signature.getContentReferences().clear();
+            signature.getContentReferences().add(contentReference);
+
             X509KeyInfoGeneratorFactory keyInfoGeneratorFactory = new X509KeyInfoGeneratorFactory();
             keyInfoGeneratorFactory.setEmitEntityCertificate(true);
             KeyInfoGenerator keyInfoGenerator = keyInfoGeneratorFactory.newInstance();
@@ -178,9 +265,9 @@ public final class SamlUtils {
                 throw new SamlProcessingException("No marshaller available for AuthnRequest");
             }
             marshaller.marshall(authnRequest);
-            Signer.signObject(signature);
-        } catch (MarshallingException | SecurityException | SignatureException e) {
-        	 LOGGER.info(" Unable to sign AuthnRequest {}");
+            new ApacheSantuarioSignerProviderImpl().signObject(signature);
+        } catch (Exception e) {
+            LOGGER.error("Unable to sign AuthnRequest: {}", e.getMessage(), e);
             throw new SamlProcessingException("Unable to sign AuthnRequest", e);
         }
     }

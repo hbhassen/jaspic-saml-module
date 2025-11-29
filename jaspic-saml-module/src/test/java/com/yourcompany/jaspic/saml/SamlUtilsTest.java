@@ -15,6 +15,7 @@ class SamlUtilsTest {
         String spEntityId = "urn:yourcompany:sp";
         String acsUrl = "https://sp.example.com/acs";
 
+        SamlUtils.initializeOpenSaml();
         AuthnRequest authnRequest = SamlUtils.buildAuthnRequest(idpSsoUrl, spEntityId, acsUrl);
 
         assertNotNull(authnRequest);
